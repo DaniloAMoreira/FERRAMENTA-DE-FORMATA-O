@@ -1,0 +1,730 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ferramentas de Dados Unificadas</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* Variáveis de estilo do JSON Tool para um visual mais moderno */
+        :root {
+            --color-bg: #f3f4f6; /* Fundo mais claro para combinar com o Formatação */
+            --color-surface: #ffffff; /* Superfície branca */
+            --color-primary: #1f2937; /* Cinza escuro */
+            --color-accent: #3b82f6; /* Azul primário */
+            --color-text: #1f2937;
+            --color-text-muted: #6b7280;
+            --panel-bg: #ffffff;
+            --panel-border: #e5e7eb;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--color-bg);
+            color: var(--color-text);
+        }
+
+        /* Estilos do background 3D, mas mantidos fora da área de conteúdo principal para não interferir */
+        #webgl-bg { 
+            position: fixed; 
+            top: 0; 
+            left: 0; 
+            width: 100%; 
+            height: 100%; 
+            z-index: -1;
+            /* Adicionado um filtro de opacidade para não brigar com o conteúdo */
+            opacity: 0.1;
+            pointer-events: none;
+        }
+        
+        .panel {
+            background: var(--panel-bg);
+            border: 1px solid var(--panel-border);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+            border-radius: 0.75rem;
+        }
+
+        /* Estilos para abas principais */
+        .main-tab-btn.active {
+            border-color: #3b82f6;
+            color: #3b82f6;
+            background-color: #eff6ff;
+        }
+        
+        /* Estilos para sub-abas */
+        .sub-tab-btn.active {
+            border-color: #10b981; /* Verde diferente para diferenciar */
+            color: #10b981;
+            background-color: #ecfdf5;
+        }
+
+        .tab-content, .sub-tab-content {
+            display: none;
+        }
+
+        .tab-content.active, .sub-tab-content.active {
+            display: block;
+        }
+
+        #output-code {
+            background-color: #f9fafb;
+            border: 1px solid #d1d5db;
+            color: #1f2937;
+            font-family: 'Courier New', Courier, monospace;
+        }
+
+        /* Classes de utilidade para o painel JSON */
+        .json-panel-style {
+            background: #ffffff;
+            backdrop-filter: none;
+            -webkit-backdrop-filter: none;
+            border: 1px solid #e5e7eb;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+        }
+
+    </style>
+</head>
+<body class="antialiased">
+
+    <canvas id="webgl-bg"></canvas>
+
+    <div class="relative z-10 w-full max-w-7xl mx-auto bg-white rounded-xl shadow-lg p-6 md:p-8 my-8 panel">
+        
+        <header class="text-center mb-6">
+            <h1 class="text-3xl md:text-4xl font-bold text-gray-900">IA DEV HTML - Central de Ferramentas de Dados</h1>
+            <p class="text-gray-600 mt-2">Escolha a ferramenta necessária para formatação, comparação ou conversão de dados.</p>
+        </header>
+
+        <div class="border-b border-gray-200 mb-6">
+            <nav class="flex -mb-px space-x-6" aria-label="Tabs">
+                <button class="main-tab-btn active whitespace-nowrap py-3 px-3 border-b-2 font-medium text-base" data-tab="toolTab1">
+                    Ferramentas de Formatação
+                </button>
+                <button class="main-tab-btn whitespace-nowrap py-3 px-3 border-b-2 font-medium text-base text-gray-500 hover:text-gray-700 hover:border-gray-300" data-tab="toolTab2">
+                    Conversor TXT para JSON
+                </button>
+            </nav>
+        </div>
+
+        <div id="toolTab1" class="tab-content active">
+            
+            <div class="border-b border-gray-200 mb-6 mt-4">
+                <nav class="flex -mb-px space-x-6" aria-label="Sub Tabs">
+                    <button class="sub-tab-btn active whitespace-nowrap py-2 px-2 border-b-2 font-medium text-sm" data-sub-tab="subTab1">
+                        Agrupador / Comparador
+                    </button>
+                    <button class="sub-tab-btn whitespace-nowrap py-2 px-2 border-b-2 font-medium text-sm text-gray-500 hover:text-gray-700 hover:border-gray-300" data-sub-tab="subTab2">
+                        Gerador TXT (Filtro)
+                    </button>
+                </nav>
+            </div>
+
+            <div id="subTab1" class="sub-tab-content active">
+                 <div class="text-center mb-6">
+                    <h2 class="text-2xl font-semibold text-gray-900">Agrupador e Comparador de Categorias (TXT)</h2>
+                    <p class="text-gray-600 mt-1">Marca itens já existentes. Omissão se Categoria **e** Assunto já estiverem cadastrados.</p>
+                </div>
+                <div class="flex flex-col sm:flex-row items-center justify-center gap-4 mb-8">
+                    <label for="existingFileInput" class="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3 bg-gray-500 text-white font-semibold rounded-lg shadow-md cursor-pointer hover:bg-gray-600 transition-all duration-300">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M5 4a2 2 0 012-2h6a2 2 0 012 2v1h-2V4H7v1H5V4zM5 7h10v9a2 2 0 01-2 2H7a2 2 0 01-2-2V7z"/></svg>
+                        1. Importar Lista Existente (2 colunas)
+                    </label>
+                    <input type="file" id="existingFileInput" class="hidden" accept=".txt">
+                    <label for="newFileInput" class="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg shadow-md cursor-pointer hover:bg-blue-700 transition-all duration-300">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z" clip-rule="evenodd" /></svg>
+                        2. Importar Nova Lista (3 colunas)
+                    </label>
+                    <input type="file" id="newFileInput" class="hidden" accept=".txt">
+                </div>
+                <div class="text-center mb-8">
+                    <button id="exportButton1" class="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3 bg-green-600 text-white font-semibold rounded-lg shadow-md hover:bg-green-700 transition-all duration-300 disabled:bg-gray-400 disabled:cursor-not-allowed" disabled>
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 11.293a1 1 0 011.414 0L10 13.586l2.293-2.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd" /><path fill-rule="evenodd" d="M10 3a1 1 0 011 1v8.586l2.293-2.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 111.414-1.414L9 12.586V4a1 1 0 011-1z" clip-rule="evenodd" /></svg>
+                        3. Exportar Arquivo Corrigido
+                    </button>
+                </div>
+                <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 min-h-[300px]">
+                    <h3 id="fileName1" class="text-lg font-semibold text-gray-700 mb-2">Aguardando arquivos...</h3>
+                    <pre id="output1" class="text-sm text-gray-600 whitespace-pre-wrap overflow-x-auto"></pre>
+                </div>
+            </div>
+
+            <div id="subTab2" class="sub-tab-content">
+                 <div class="text-center mb-6">
+                    <h2 class="text-2xl font-semibold text-gray-900">Gerador de TXT a partir de XLS (Filtro)</h2>
+                    <p class="text-gray-600 mt-1">Filtra linhas onde Status="ativo" **e** Categoria inicia com "(SUP)".</p>
+                </div>
+
+                <div class="flex flex-col sm:flex-row items-center justify-center gap-4 mb-8">
+                     <label for="xlsFileInput" class="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg shadow-md cursor-pointer hover:bg-blue-700 transition-all duration-300">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z" clip-rule="evenodd" /></svg>
+                        1. Importar Planilha (.xls, .xlsx)
+                    </label>
+                    <input type="file" id="xlsFileInput" class="hidden" accept=".xls, .xlsx">
+                </div>
+
+                <div class="text-center mb-8">
+                    <button id="exportButton2" class="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3 bg-green-600 text-white font-semibold rounded-lg shadow-md hover:bg-green-700 transition-all duration-300 disabled:bg-gray-400 disabled:cursor-not-allowed" disabled>
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 11.293a1 1 0 011.414 0L10 13.586l2.293-2.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd" /><path fill-rule="evenodd" d="M10 3a1 1 0 011 1v8.586l2.293-2.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 111.414-1.414L9 12.586V4a1 1 0 011-1z" clip-rule="evenodd" /></svg>
+                        2. Exportar Arquivo TXT Filtrado
+                    </button>
+                </div>
+                
+                <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 min-h-[300px]">
+                    <h3 id="fileName2" class="text-lg font-semibold text-gray-700 mb-2">Aguardando arquivo de planilha...</h3>
+                    <pre id="output2" class="text-sm text-gray-600 whitespace-pre-wrap overflow-x-auto"></pre>
+                </div>
+            </div>
+        </div>
+
+        <div id="toolTab2" class="tab-content">
+             <div class="text-center mb-6">
+                <h2 class="text-2xl font-semibold text-gray-900">Conversor de TXT para JSON</h2>
+                <p class="text-gray-600 mt-1">Converte arquivo de duas colunas (Categoria/Assunto) para o formato JSON agrupado.</p>
+            </div>
+            
+            <main class="grid md:grid-cols-2 gap-6">
+                <div class="json-panel-style p-6 flex flex-col">
+                    <h3 class="text-xl font-semibold mb-4">1. Entrada de Dados (.txt)</h3>
+                    <div id="json-drop-zone" class="relative flex flex-col items-center justify-center p-10 rounded-lg text-center cursor-pointer h-full border-2 border-dashed border-gray-400 hover:border-blue-600 transition-all duration-300">
+                        <input type="file" id="jsonFileInput" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" accept=".txt">
+                        <svg class="w-16 h-16 text-gray-500 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
+                        <p class="text-gray-600">Arraste e solte seu arquivo <code class="bg-gray-200 px-1 rounded text-sm">.txt</code> aqui</p>
+                        <p class="text-sm text-gray-500 mt-2">ou</p>
+                        <p class="text-blue-600 font-semibold mt-2">Clique para selecionar o arquivo</p>
+                    </div>
+                     <p id="json-file-name" class="text-center text-sm mt-4 text-gray-500 h-5"></p>
+                </div>
+
+                <div class="json-panel-style p-6 flex flex-col">
+                    <h3 class="text-xl font-semibold mb-4">2. Saída em JSON</h3>
+                    <div class="relative flex-grow h-64 md:h-auto">
+                        <textarea id="output-code" readonly class="w-full h-full rounded-lg p-4 resize-none focus:outline-none"></textarea>
+                    </div>
+                    <div class="flex items-center gap-4 mt-4">
+                        <button id="copyBtn" class="w-full py-2 rounded-lg font-semibold bg-blue-600 text-white hover:bg-blue-700 transition-all duration-300">Copiar Código</button>
+                        <button id="downloadBtn" class="w-full py-2 rounded-lg font-semibold bg-gray-600 text-white hover:bg-gray-700 transition-all duration-300">Baixar .json</button>
+                    </div>
+                </div>
+            </main>
+
+        </div>
+    </div>
+    
+    <div id="messageBox" class="fixed bottom-5 right-5 bg-green-500 text-white py-2 px-4 rounded-lg shadow-lg hidden z-50">
+        </div>
+
+    <script>
+        // --- GLOBAL HELPER FUNCTION ---
+        function showCustomMessage(message, type = 'success') {
+            const messageBox = document.getElementById('messageBox');
+            if (!messageBox) return;
+            messageBox.textContent = message;
+            messageBox.className = `fixed bottom-5 right-5 text-white py-2 px-4 rounded-lg shadow-lg z-50`; // Reset classes
+            if (type === 'success') {
+                messageBox.classList.add('bg-green-500');
+            } else {
+                messageBox.classList.add('bg-red-500');
+            }
+            messageBox.classList.remove('hidden');
+            setTimeout(() => {
+                messageBox.classList.add('hidden');
+            }, 3000);
+        }
+
+        // --- TABS LOGIC (Principal) ---
+        const mainTabButtons = document.querySelectorAll('.main-tab-btn');
+        const mainTabContents = document.querySelectorAll('.tab-content');
+
+        mainTabButtons.forEach(button => {
+            button.addEventListener('click', () => {
+                mainTabButtons.forEach(btn => {
+                    btn.classList.remove('active', 'border-blue-500', 'text-blue-600', 'bg-blue-50');
+                    btn.classList.add('text-gray-500', 'hover:text-gray-700', 'hover:border-gray-300');
+                });
+                button.classList.add('active', 'border-blue-500', 'text-blue-600', 'bg-blue-50');
+                button.classList.remove('text-gray-500', 'hover:text-gray-700', 'hover:border-gray-300');
+                
+                mainTabContents.forEach(content => content.classList.remove('active'));
+                const activeTab = document.getElementById(button.dataset.tab);
+                if (activeTab) activeTab.classList.add('active');
+
+                // Garante que a primeira sub-aba é ativada ao mudar de aba principal
+                if (button.dataset.tab === 'toolTab1') {
+                     const firstSubTabBtn = document.querySelector('.sub-tab-btn');
+                     const firstSubTabContent = document.querySelector('.sub-tab-content');
+                     if (firstSubTabBtn) firstSubTabBtn.click(); // Simula o clique
+                     else if (firstSubTabContent) firstSubTabContent.classList.add('active'); // Fallback
+                }
+            });
+        });
+
+        // --- SUB-TABS LOGIC (toolTab1) ---
+        const subTabButtons = document.querySelectorAll('.sub-tab-btn');
+        const subTabContents = document.querySelectorAll('.sub-tab-content');
+
+        subTabButtons.forEach(button => {
+            button.addEventListener('click', () => {
+                subTabButtons.forEach(btn => {
+                    btn.classList.remove('active', 'border-green-500', 'text-green-600', 'bg-green-50');
+                    btn.classList.add('text-gray-500', 'hover:text-gray-700', 'hover:border-gray-300');
+                });
+                button.classList.add('active', 'border-green-500', 'text-green-600', 'bg-green-50');
+                button.classList.remove('text-gray-500', 'hover:text-gray-700', 'hover:border-gray-300');
+                
+                subTabContents.forEach(content => content.classList.remove('active'));
+                document.getElementById(button.dataset.subTab).classList.add('active');
+            });
+        });
+
+        // --- LÓGICA DA FERRAMENTA 1: AGRUPADOR/COMPARADOR (subTab1) ---
+        (function() {
+            const newFileInput = document.getElementById('newFileInput');
+            const existingFileInput = document.getElementById('existingFileInput');
+            const exportButton = document.getElementById('exportButton1');
+            const outputDiv = document.getElementById('output1');
+            const fileNameDiv = document.getElementById('fileName1');
+            
+            let formattedTextContent = '';
+            let currentFileName = 'comparado.txt';
+            let existingCategories = new Set();
+            let existingSubjects = new Set();
+            let newItemsRawContent = '';
+
+            newFileInput.addEventListener('change', handleNewFileSelect);
+            existingFileInput.addEventListener('change', handleExistingFileSelect);
+            exportButton.addEventListener('click', exportFormattedFile);
+
+            function handleExistingFileSelect(event) {
+                const file = event.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    // Adaptado para aceitar 1 ou 2 colunas para Categoria/Assunto
+                    const lines = e.target.result.split(/\r?\n/).filter(line => line.trim() !== '');
+                    existingCategories.clear();
+                    existingSubjects.clear();
+                    lines.forEach(line => {
+                        const parts = line.split('\t');
+                        if (parts.length >= 1) {
+                            existingCategories.add(parts[0].trim()); // Sempre adiciona o primeiro como Categoria
+                            if (parts.length >= 2) {
+                                existingSubjects.add(parts[1].trim()); // Adiciona o segundo como Assunto, se existir
+                            }
+                        }
+                    });
+                    showCustomMessage(`${existingCategories.size} categorias e ${existingSubjects.size} assuntos (opcional) carregados.`);
+                    if (newItemsRawContent) processAndDisplayData(newItemsRawContent);
+                };
+                reader.readAsText(file, 'UTF-8');
+            }
+
+            function handleNewFileSelect(event) {
+                const file = event.target.files[0];
+                if (!file) return;
+                currentFileName = `comparado_${file.name}`;
+                fileNameDiv.textContent = `Visualizando: ${file.name}`;
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    newItemsRawContent = e.target.result;
+                    processAndDisplayData(newItemsRawContent);
+                };
+                reader.readAsText(file, 'UTF-8');
+            }
+
+            function processAndDisplayData(data) {
+                // Linhas originais: Ticket, Categoria, Assunto
+                const lines = data.split(/\r?\n/).filter(line => line.trim() !== '' && !line.startsWith('Número do ticket')).slice(0);
+                const groupedData = {};
+
+                // 1. Agrupar os dados pela Categoria (Coluna 2) para ordenação
+                lines.forEach(line => {
+                    const parts = line.split('\t');
+                    if (parts.length >= 3) {
+                        const ticket = parts[0].trim();
+                        const category = parts[1].trim();
+                        const originalCategory = parts[1]; // Mantém a formatação original (se houver espaços extras)
+                        // Junta as demais colunas como Assunto
+                        const originalSubject = parts.slice(2).join('\t'); 
+
+                        if (!groupedData[category]) {
+                            groupedData[category] = [];
+                        }
+                        groupedData[category].push({ ticket, originalCategory, originalSubject });
+                    }
+                });
+
+                const sortedCategories = Object.keys(groupedData).sort((a, b) => a.localeCompare(b));
+                let displayHTML = '';
+                let exportText = '';
+                
+                // 2. Aplicar o filtro e a marcação
+                sortedCategories.forEach(categoryGroupKey => {
+                    const itemsInCategory = groupedData[categoryGroupKey];
+                    
+                    itemsInCategory.forEach(item => {
+                        const { ticket, originalCategory, originalSubject } = item;
+                        const trimmedCategory = originalCategory.trim();
+                        const trimmedSubject = originalSubject.trim();
+
+                        const isCategoryRegistered = existingCategories.has(trimmedCategory);
+                        const isSubjectRegistered = existingSubjects.has(trimmedSubject);
+
+                        // REGRA: Se a categoria **E** o assunto já estiverem cadastrados, omite a linha.
+                        if (isCategoryRegistered && isSubjectRegistered) {
+                            return; // Pula para o próximo item
+                        }
+
+                        // Marcações para HTML (visualização)
+                        let categoryPrefixHTML = isCategoryRegistered ? `<span class="text-green-600 font-medium">[CAT. EXISTENTE]</span> ` : '';
+                        let subjectPrefixHTML = isSubjectRegistered ? `<span class="text-green-600 font-medium">[ASSUNTO EXISTENTE]</span> ` : '';
+
+                        // Marcações para o TXT de Exportação (simples)
+                        let categoryPrefixExport = isCategoryRegistered ? `[CAT. EXISTENTE] ` : '';
+                        let subjectPrefixExport = isSubjectRegistered ? `[ASSUNTO EXISTENTE] ` : '';
+                        
+                        // Formato de saída: TICKET \t MARCAÇÃO_CAT Categoria \t MARCAÇÃO_ASS Assunto
+                        displayHTML += `${ticket}\t${categoryPrefixHTML}${originalCategory}\t${subjectPrefixHTML}${originalSubject}\n`;
+                        exportText += `${ticket}\t${categoryPrefixExport}${originalCategory}\t${subjectPrefixExport}${originalSubject}\n`;
+                    });
+                    // Adiciona quebra de linha após o grupo, se houver itens
+                    if (itemsInCategory.filter(item => !(existingCategories.has(item.originalCategory.trim()) && existingSubjects.has(item.originalSubject.trim()))).length > 0) {
+                         displayHTML += '\n';
+                         exportText += '\n';
+                    }
+                });
+
+                formattedTextContent = exportText.trim();
+                outputDiv.innerHTML = formattedTextContent ? displayHTML.trim() : 'Nenhum item novo para comparar ou exibir.';
+                exportButton.disabled = !formattedTextContent;
+                if (formattedTextContent) {
+                    showCustomMessage('Comparação concluída. Linhas duplicadas omitidas.', 'success');
+                } else {
+                    showCustomMessage('Nenhuma linha restante após a comparação.', 'success');
+                }
+            }
+
+            function exportFormattedFile() {
+                if (!formattedTextContent) {
+                    showCustomMessage('Não há conteúdo para exportar.', 'error');
+                    return;
+                }
+                const blob = new Blob([formattedTextContent], { type: 'text/plain;charset=utf-8' });
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(blob);
+                link.download = currentFileName;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(link.href);
+                showCustomMessage('Arquivo TXT comparado gerado com sucesso!', 'success');
+            }
+        })();
+
+        // --- LÓGICA DA FERRAMENTA 2: GERADOR TXT (FILTRO) (subTab2) ---
+        (function() {
+            const xlsFileInput = document.getElementById('xlsFileInput');
+            const exportButton = document.getElementById('exportButton2');
+            const outputDiv = document.getElementById('output2');
+            const fileNameDiv = document.getElementById('fileName2');
+
+            let txtContentForExport = '';
+            let exportFileName = 'filtrado.txt';
+
+            xlsFileInput.addEventListener('change', handleFile);
+            exportButton.addEventListener('click', exportTxtFile);
+
+            function handleFile(event) {
+                const file = event.target.files[0];
+                if (!file) return;
+
+                exportFileName = `filtrado_${file.name.split('.')[0]}.txt`;
+                fileNameDiv.textContent = `Processando: ${file.name}`;
+                outputDiv.textContent = 'Lendo e filtrando a planilha...';
+                exportButton.disabled = true;
+                txtContentForExport = ''; // Limpa conteúdo
+
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    try {
+                        const data = new Uint8Array(e.target.result);
+                        const workbook = XLSX.read(data, { type: 'array' });
+                        const firstSheetName = workbook.SheetNames[0];
+                        const worksheet = workbook.Sheets[firstSheetName];
+                        // sheet_to_json com header:1 garante que a primeira linha é o cabeçalho
+                        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+                        if (jsonData.length < 2) {
+                            showCustomMessage('Planilha vazia ou com apenas cabeçalho.', 'error');
+                            fileNameDiv.textContent = 'Aguardando arquivo de planilha...';
+                            outputDiv.textContent = '';
+                            return;
+                        }
+
+                        const headers = jsonData[0].map(h => typeof h === 'string' ? h.trim() : '');
+                        const dataRows = jsonData.slice(1).map(row => {
+                             // Cria objeto com chaves do cabeçalho
+                             return headers.reduce((obj, header, index) => {
+                                obj[header] = row[index] !== undefined ? row[index] : '';
+                                return obj;
+                            }, {});
+                        });
+                        
+                        // Encontra os nomes exatos das colunas (case-insensitive)
+                        const statusHeader = headers.find(h => h.toLowerCase() === 'status');
+                        const categoryHeader = headers.find(h => h.toLowerCase() === 'categorias de assuntos');
+                        const subjectHeader = headers.find(h => h.toLowerCase() === 'assunto');
+
+                        if (!statusHeader || !categoryHeader || !subjectHeader) {
+                            showCustomMessage('Colunas "Status", "Categorias de assuntos" ou "Assunto" não encontradas na planilha.', 'error');
+                            fileNameDiv.textContent = 'Erro ao ler a planilha.';
+                            outputDiv.textContent = '';
+                            return;
+                        }
+
+                        const filteredData = dataRows.filter(row =>
+                            row[statusHeader] && typeof row[statusHeader] === 'string' && row[statusHeader].toLowerCase() === 'ativo' &&
+                            row[categoryHeader] && typeof row[categoryHeader] === 'string' && row[categoryHeader].startsWith('(SUP)')
+                        );
+
+                        if (filteredData.length === 0) {
+                             outputDiv.textContent = 'Nenhum dado encontrado com os critérios de filtro (Status="ativo" e Categoria iniciando com "(SUP)").';
+                             showCustomMessage('Filtro não retornou resultados.', 'success');
+                             return;
+                        }
+
+                        let outputText = `${categoryHeader}\t${subjectHeader}\n`;
+                        filteredData.forEach(row => {
+                            // Garante que o conteúdo é tratado como string antes da concatenação
+                            const category = String(row[categoryHeader] || '');
+                            const subject = String(row[subjectHeader] || '');
+                            outputText += `${category}\t${subject}\n`;
+                        });
+
+                        txtContentForExport = outputText;
+                        outputDiv.textContent = txtContentForExport;
+                        exportButton.disabled = false;
+                        fileNameDiv.textContent = `Visualizando dados filtrados de: ${file.name}`;
+                        showCustomMessage(`${filteredData.length} linhas foram filtradas com sucesso!`, 'success');
+
+                    } catch (err) {
+                        console.error("Erro ao processar o arquivo:", err);
+                        showCustomMessage('Ocorreu um erro ao processar o arquivo. Verifique se é uma planilha válida.', 'error');
+                        fileNameDiv.textContent = 'Aguardando arquivo de planilha...';
+                        outputDiv.textContent = '';
+                    }
+                };
+                
+                reader.onerror = function() {
+                    showCustomMessage('Não foi possível ler o arquivo selecionado.', 'error');
+                    fileNameDiv.textContent = 'Aguardando arquivo de planilha...';
+                    outputDiv.textContent = '';
+                };
+
+                reader.readAsArrayBuffer(file);
+            }
+
+            function exportTxtFile() {
+                if (!txtContentForExport) {
+                    showCustomMessage('Não há conteúdo para exportar.', 'error');
+                    return;
+                }
+                const blob = new Blob([txtContentForExport], { type: 'text/plain;charset=utf-8' });
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(blob);
+                link.download = exportFileName;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(link.href);
+                showCustomMessage('Arquivo TXT gerado com sucesso!', 'success');
+            }
+        })();
+        
+        // --- LÓGICA DA FERRAMENTA 3: CONVERSOR TXT PARA JSON (toolTab2) ---
+        (function() {
+            const dropZone = document.getElementById('json-drop-zone');
+            const fileInput = document.getElementById('jsonFileInput');
+            const fileNameDisplay = document.getElementById('json-file-name');
+            const outputCode = document.getElementById('output-code');
+            const copyBtn = document.getElementById('copyBtn');
+            const downloadBtn = document.getElementById('downloadBtn');
+
+            // --- Lógica de Conversão ---
+            const parseTxtToJSON = (text) => {
+                const lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
+                if (lines.length === 0) return [];
+
+                const categoryMap = new Map();
+
+                // Tenta ignorar o cabeçalho, se a primeira linha tiver pelo menos duas colunas e a primeira for "Categoria"
+                const firstLineParts = lines[0].split('\t').map(p => p.trim());
+                const isHeader = firstLineParts.length >= 2 && firstLineParts[0].toLowerCase() === 'categoria';
+                const startIndex = isHeader ? 1 : 0;
+
+                for (let i = startIndex; i < lines.length; i++) {
+                    const parts = lines[i].split('\t'); // Divide por TAB
+                    if (parts.length >= 2) {
+                        const categoryName = parts[0].trim();
+                        const subjectName = parts[1].trim();
+
+                        if (categoryName && subjectName) { // Garante que ambos não estão vazios
+                            if (!categoryMap.has(categoryName)) {
+                                categoryMap.set(categoryName, new Set());
+                            }
+                            categoryMap.get(categoryName).add(subjectName);
+                        }
+                    }
+                }
+
+                // Transforma o mapa no array de objetos final
+                const jsonResult = [];
+                let idCounter = 1;
+                for (const [name, subjectsSet] of categoryMap.entries()) {
+                    // Ordena os assuntos por nome
+                    const subjects = Array.from(subjectsSet)
+                        .sort((a, b) => a.localeCompare(b))
+                        .map(subName => ({ name: subName }));
+                        
+                    jsonResult.push({
+                        id: idCounter++,
+                        name: name,
+                        expanded: false,
+                        subjects: subjects
+                    });
+                }
+                
+                return jsonResult;
+            };
+
+            // --- Processamento do Arquivo ---
+            const processFile = (file) => {
+                if (!file || !file.type.match('text/plain')) {
+                    showCustomMessage('Por favor, selecione um arquivo .txt válido.', 'error');
+                    return;
+                }
+                
+                fileNameDisplay.textContent = file.name;
+                outputCode.value = 'Processando...';
+
+                const reader = new FileReader();
+
+                reader.onload = (event) => {
+                    const text = event.target.result;
+                    const jsonData = parseTxtToJSON(text);
+                    const jsonString = JSON.stringify(jsonData, null, 2);
+                    outputCode.value = jsonString;
+                    showCustomMessage(`Conversão para JSON concluída. ${jsonData.length} categorias geradas.`, 'success');
+                };
+
+                reader.onerror = () => {
+                    showCustomMessage('Ocorreu um erro ao ler o arquivo.', 'error');
+                    fileNameDisplay.textContent = '';
+                    outputCode.value = '';
+                };
+
+                reader.readAsText(file, 'UTF-8');
+            };
+
+            // --- Event Listeners ---
+
+            fileInput.addEventListener('change', (e) => {
+                if (e.target.files.length > 0) {
+                    processFile(e.target.files[0]);
+                }
+            });
+
+            // Drag and Drop
+            dropZone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                dropZone.classList.add('dragover');
+            });
+            dropZone.addEventListener('dragleave', () => {
+                dropZone.classList.remove('dragover');
+            });
+            dropZone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                dropZone.classList.remove('dragover');
+                if (e.dataTransfer.files.length > 0) {
+                    fileInput.files = e.dataTransfer.files; 
+                    processFile(e.dataTransfer.files[0]);
+                }
+            });
+
+            // Botões de Ação
+            copyBtn.addEventListener('click', () => {
+                if (!outputCode.value) return;
+                outputCode.select();
+                // Usando a API moderna: navigator.clipboard.writeText
+                if (navigator.clipboard) {
+                    navigator.clipboard.writeText(outputCode.value).then(() => {
+                        copyBtn.textContent = 'Copiado!';
+                        showCustomMessage('Código JSON copiado para a área de transferência!', 'success');
+                        setTimeout(() => { copyBtn.textContent = 'Copiar Código'; }, 2000);
+                    }).catch(err => {
+                        // Fallback para document.execCommand('copy') (mais antigo)
+                        document.execCommand('copy');
+                        copyBtn.textContent = 'Copiado (via fallback)!';
+                        showCustomMessage('Código JSON copiado!', 'success');
+                        setTimeout(() => { copyBtn.textContent = 'Copiar Código'; }, 2000);
+                    });
+                } else {
+                    document.execCommand('copy');
+                    copyBtn.textContent = 'Copiado (via fallback)!';
+                    showCustomMessage('Código JSON copiado!', 'success');
+                    setTimeout(() => { copyBtn.textContent = 'Copiar Código'; }, 2000);
+                }
+            });
+
+            downloadBtn.addEventListener('click', () => {
+                if (!outputCode.value) return;
+                const blob = new Blob([outputCode.value], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'data_base.json';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                showCustomMessage('Arquivo JSON gerado com sucesso!', 'success');
+            });
+            
+            // --- Fundo WebGL (Adaptado para o novo estilo) ---
+            (() => {
+                const canvas = document.getElementById('webgl-bg');
+                if (!canvas) return;
+                const scene = new THREE.Scene();
+                const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+                const renderer = new THREE.WebGLRenderer({ canvas, alpha: true });
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                renderer.setClearColor(0x000000, 0);
+                const geometry = new THREE.BufferGeometry();
+                const vertices = [];
+                for (let i = 0; i < 1000; i++) {
+                    vertices.push((Math.random() - 0.5) * 2000, (Math.random() - 0.5) * 2000, (Math.random() - 0.5) * 2000);
+                }
+                geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+                const material = new THREE.PointsMaterial({ size: 1.5, color: 0x3b82f6 }); /* Cor azul primária */
+                const points = new THREE.Points(geometry, material);
+                scene.add(points);
+                camera.position.z = 1000;
+                const animate = () => {
+                    requestAnimationFrame(animate);
+                    points.rotation.x += 0.0002; /* Movimento mais lento */
+                    points.rotation.y += 0.0005;
+                    renderer.render(scene, camera);
+                };
+                animate();
+                window.addEventListener('resize', () => {
+                    camera.aspect = window.innerWidth / window.innerHeight;
+                    camera.updateProjectionMatrix();
+                    renderer.setSize(window.innerWidth, window.innerHeight);
+                });
+            })();
+        })();
+    </script>
+</body>
+</html>
